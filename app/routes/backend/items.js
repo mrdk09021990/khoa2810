@@ -30,7 +30,7 @@ router.get('(/status/:status)?', async (req, res, next) => {
 	let statusFilter 		= await UtilsHelpers.createFilterStatus(currentStatus , modelName);
 	let sortField			= ParamsHelpers.getParam(req.session, `sort_field`, `name`); 
 	let sortType			= ParamsHelpers.getParam(req.session, `sort_type`, `asc`); 
-	let groupsID			= ParamsHelpers.getParam(req.session, 'groups_id', ''); 
+	let groupsID			= ParamsHelpers.getParam(req.session, 'groups_id', 'allvalue'); 
 	let sort 				= {};
 	sort[sortField]			= sortType;
 
