@@ -1,0 +1,16 @@
+<% 
+    imageHelper = (folder, imageName, alt = `Image`) => {
+        
+        if (imageName == null) {
+                imageName = `no-avatar.png` ;
+        }
+       
+        return `<img class="img-reponsive img-avatar" style="width: 120% ; height: 200%;" src="${folder + imageName}" alt="${alt}" />`;
+    }
+%>
+
+
+
+
+
+
