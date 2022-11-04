@@ -4,31 +4,36 @@ var router 	= express.Router();
 const util = require('util');
 const modelName = 'items';
 
-const systemConfig  = require(__path_configs + 'system');
-const notify  		= require(__path_configs + 'notify');
-const ItemsModel 	= require(__path_schemas + modelName);
-const ValidateItems	= require(__path_validates + modelName);
-const UtilsHelpers 	= require(__path_helpers + 'utils');
+
+const systemConfig  	= require(__path_configs + 'system');
+const notify  			= require(__path_configs + 'notify');
+const ItemsModel 		= require(__path_schemas + 'items');
+const ItemsModel_Models	= require(__path_models + 'items');
+const GroupsModel 	= require(__path_schemas + 'groups');
+const ValidateItems	= require(__path_validates + 'items');
+const UtilsHelpers 	= require(__path_helpers + 'items');
 const ParamsHelpers = require(__path_helpers + 'params');
+const FileHelpers = require(__path_helpers + 'file');
 
 const linkIndex		 = '/' + systemConfig.prefixAdmin + `/${modelName}/`;
-const pageTitleIndex = 'Groups Management';
+const pageTitleIndex = 'items Management';
 const pageTitleAdd   = pageTitleIndex + ' - Add';
 const pageTitleEdit  = pageTitleIndex + ' - Edit';
 const folderView	 = __path_views + `pages/${modelName}/`;
+const StringHelpers  = require(__path_helpers + 'string');
+const uploadAvatar	 = FileHelpers.upload('avatar' , 'items');
 
 // List items
 router.get('(/status/:status)?', async (req, res, next) => {
 	let objWhere	 		= {};
 	let keyword				= ParamsHelpers.getParam(req.query, 'keyword', '');
 	let currentStatus		= ParamsHelpers.getParam(req.params, 'status', 'all'); 
-	let statusFilter 		= await UtilsHelpers.createFilterStatus(currentStatus , 'groups');
+	let statusFilter 		= await UtilsHelpers.createFilterStatus(currentStatus , modelName);
 	let sortField			= ParamsHelpers.getParam(req.session, `sort_field`, `name`); 
 	let sortType			= ParamsHelpers.getParam(req.session, `sort_type`, `asc`); 
+	let groupsID			= ParamsHelpers.getParam(req.session, 'groups_id', 'allvalue'); 
 	let sort 				= {};
 	sort[sortField]			= sortType;
-
-	
 
 	let pagination 	 = {
 		totalItems		 : 1,
@@ -37,16 +42,21 @@ router.get('(/status/:status)?', async (req, res, next) => {
 		pageRanges		 : 3
 	};
 
+
+	const groupsItems = await GroupsModel.find({} , {_id: 1 , name: 1})
+
+	groupsItems.unshift({_id: 'allvalue' , name: 'All groups'});
+
+	if(groupsID !== 'allvalue') objWhere['groups.id'] = groupsID ;
+	
 	if(currentStatus !== 'all') objWhere.status = currentStatus;
 	if(keyword !== '') objWhere.name = new RegExp(keyword, 'i');
-
-	await ItemsModel.count(objWhere).then( (data) => {
-		pagination.totalItems = data;
-	});
+	
+	pagination.totalItems = await ItemsModel.count(objWhere)
 	
 	ItemsModel
 		.find(objWhere)
-		.select('name status ordering created modified groups_acp')
+		.select('name status ordering created modified groups.name slug avatar')
 		.sort(sort)
 		.skip((pagination.currentPage-1) * pagination.totalItemsPerPage)
 		.limit(pagination.totalItemsPerPage)
@@ -59,7 +69,9 @@ router.get('(/status/:status)?', async (req, res, next) => {
 				currentStatus,
 				keyword,
 				sortField,
-				sortType
+				sortType,
+				groupsItems,
+				groupsID
 			});
 		});
 });
@@ -101,6 +113,8 @@ router.post('/change-status/:status', (req, res, next) => {
 	});
 });
 
+
+
 // Change ordering - Multi
 router.post('/change-ordering', (req, res, next) => {
 	let cids 		= req.body.cid;
@@ -136,9 +150,10 @@ router.post('/change-ordering', (req, res, next) => {
 });
 
 // Delete
-router.get('/delete/:id', (req, res, next) => {
-	let id				= ParamsHelpers.getParam(req.params, 'id', ''); 	
-	ItemsModel.deleteOne({_id: id}, (err, result) => {
+router.get('/delete/:id', async (req, res, next) => {
+	let id				= ParamsHelpers.getParam(req.params, 'id', ''); 
+
+	ItemsModel_Models.deleteItem(id , {task: 'delete-one'}).then((result) => {
 		req.flash('success', notify.DELETE_SUCCESS, false);
 		res.redirect(linkIndex);
 	});
@@ -153,57 +168,109 @@ router.post('/delete', (req, res, next) => {
 });
 
 // FORM
-router.get(('/form(/:id)?'), (req, res, next) => {
+router.get(('/form(/:id)?'), async (req, res, next) => {
 	let id		= ParamsHelpers.getParam(req.params, 'id', '');
-	let item	= {name: '', ordering: 0, status: 'novalue'};
+	let item	= {name: '', ordering: 0, status: 'novalue' , groups_id: '' , groups_name: '' };
 	let errors   = null;
+	let groupsItems = [];
+
+	await GroupsModel.find({} , {_id: 1 , name: 1}).then((items) =>{
+		groupsItems = items;
+		groupsItems.unshift({_id: 'novalue' , name: 'Choose groups'});
+	})
 	if(id === '') { // ADD
-		res.render(`${folderView}form`, { pageTitle: pageTitleAdd, item, errors});
+		res.render(`${folderView}form`, { pageTitle: pageTitleAdd, item, errors , groupsItems});
 	}else { // EDIT
 		ItemsModel.findById(id, (err, item) =>{
-			res.render(`${folderView}form`, { pageTitle: pageTitleEdit, item, errors});
+			item.groups_id = item.groups.id;
+			item.groups_name = item.groups.name;
+			res.render(`${folderView}form`, { pageTitle: pageTitleEdit, item, errors , groupsItems});
 		});	
 	}
 });
 
 // SAVE = ADD EDIT
-router.post('/save', (req, res, next) => {
-	req.body = JSON.parse(JSON.stringify(req.body));
-	ValidateItems.validator(req);
+router.post('/save',  (req, res, next) => {
+	uploadAvatar (req, res, async (errUpload) => {
+		
+		req.body = JSON.parse(JSON.stringify(req.body));
 
-	let item = Object.assign(req.body);
-	let errors = req.validationErrors();
+		ValidateItems.validator(req);
 
-	if(typeof item !== "undefined" && item.id !== "" ){	// edit
-		if(errors) { 
-			res.render(`${folderView}form`, { pageTitle: pageTitleEdit, item, errors});
-		}else {
-			ItemsModel.updateOne({_id: item.id}, {
-				ordering: parseInt(item.ordering),
-				name			: item.name,
-				content			: item.content,
-				status			: item.status,
-				groups_acp     	: item.groups_acp,
-				modified: {
+		let item = Object.assign(req.body);
+		
+		let errors = req.validationErrors();
+
+		if (errUpload){
+			errors.push({param: 'avatar' , msg: errUpload});
+			}
+		
+		
+
+		if(typeof item !== "undefined" && item.id !== "" ){	// edit
+			if(errors) { 
+				let groupsItems = [];
+
+				await GroupsModel.find({} , {_id: 1 , name: 1}).then((items) =>{
+					groupsItems = items;
+					groupsItems.unshift({_id: 'novalue' , name: 'Choose groups'});
+				})
+		
+				res.render(`${folderView}form`, { pageTitle: pageTitleEdit, item, errors , groupsItems});
+			}else {
+				
+				ItemsModel.updateOne({_id: item.id}, {
+					ordering: parseInt(item.ordering),
+					name			: item.name,
+					content			: item.content,
+					status			: item.status,
+					avatar 			: item.avatar,
+					slug 			: StringHelpers.createAlias(item.slug),
+					groups :  {
+						id     : item.groups_id,
+						name   : item.groups_name,
+					},
+					modified: {
+						user_id     : 0,
+						user_name   : 0,
+						time       : Date.now()
+					}
+				}, (err, result) => {
+					req.flash('success', notify.EDIT_SUCCESS, false);
+					res.redirect(linkIndex);
+				});
+			}
+		}else { // add
+			if(errors) { 
+				
+				let groupsItems = [];
+
+				await GroupsModel.find({} , {_id: 1 , name: 1}).then((items) =>{
+					groupsItems = items;
+					groupsItems.unshift({_id: 'novalue' , name: 'Choose groups'});
+				})
+				res.render(`${folderView}form`, { pageTitle: pageTitleAdd, item, errors  , groupsItems});
+			}else {
+				item.avatar = req.file.filename,
+				item.created = {
 					user_id     : 0,
-					user_name   : 0,
+					user_name   : 'admin',
 					time       : Date.now()
-				}
-			}, (err, result) => {
-				req.flash('success', notify.EDIT_SUCCESS, false);
-				res.redirect(linkIndex);
-			});
+				},
+				item.slug =	StringHelpers.createAlias(item.slug),
+				item.groups = {
+					id     : item.groups_id,
+					name   : item.groups_name,	
+				},
+				
+				new ItemsModel(item).save().then(()=> {
+					req.flash('success', notify.ADD_SUCCESS, false);
+					res.redirect(linkIndex);
+				})
+			}
 		}
-	}else { // add
-		if(errors) { 
-			res.render(`${folderView}form`, { pageTitle: pageTitleAdd, item, errors});
-		}else {
-			new ItemsModel(item).save().then(()=> {
-				req.flash('success', notify.ADD_SUCCESS, false);
-				res.redirect(linkIndex);
-			})
-		}
-	}	
+			
+	});		
 });
 
 //---------SORT-------------
@@ -215,4 +282,36 @@ router.get(('/sort/:sort_field/:sort_type') , (req, res, next) => {
 	res.redirect(linkIndex);
    });
 
+//---------filter-group------------
+
+router.get(('/filter-groups/:groups_id') , (req, res, next) => {
+	req.session.groups_id		= ParamsHelpers.getParam(req.params, 'groups_id' , '');
+	res.redirect(linkIndex);
+   });
+
+
+
+// //---------tao phuong thuc up file anh ------------
+
+   
+
+// //---------up load from ------------
+// router.get('/upload' , (req, res, next) => {
+// 	let errors   = null;
+// 	res.render(`${folderView}upload` , {pageTitle: pageTitleIndex , errors})
+// });
+
+// //---------up load post ------------
+// router.post('/upload'  , (req, res, next) => {
+// 	let errors   = [];
+// 	uploadAvatar (req, res, function(err){
+// 		if (err){
+// 			errors.push({param: 'avatar' , msg: err});
+// 		}
+// 		res.render(`${folderView}upload` , {pageTitle: pageTitleIndex , errors})
+// 	})
+	
+// });
+
 module.exports = router;
+

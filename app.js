@@ -35,7 +35,6 @@ const databaseConfig = require(__path_configs + 'database');
 mongoose.connect(`mongodb+srv://${databaseConfig.username}:${databaseConfig.password}@cluster0.5dyiarr.mongodb.net/${databaseConfig.database}`);
 
 
-
 var app = express();
 app.use(bodyParser.urlencoded({extended: true}))
 app.use(cookieParser());

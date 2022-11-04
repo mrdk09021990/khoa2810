@@ -6,6 +6,9 @@
 <% include ./../../helpers/source-by %>
 <% include ./../../helpers/sort %>
 <% include ./../../helpers/selectbox %>
+<% include ./../../helpers/image %>
+
+
 
 <% 
 	const collection 	= "items";
@@ -78,7 +81,7 @@
 						<%- sortHelper(linkPrefix , 'name' , 'name' , sortField , sortType , 'width: 20%') %>
 						<th class="text-center">avatar</a></th>
 						<%- sortHelper(linkPrefix , 'status' , 'status' , sortField , sortType) %>
-						<%- sortHelper(linkPrefix , 'ordering' , 'ordering' , sortField , sortType, 'width: 20%') %>
+						<%- sortHelper(linkPrefix , 'ordering' , 'ordering' , sortField , sortType, `style="width: 10%;"`) %>
 						<%- sortHelper(linkPrefix , 'groups' , 'groups.name' , sortField , sortType) %>
 						<th class="text-center">slug</a></th>
 						<th class="text-center">created</a></th>
@@ -99,7 +102,7 @@
 							<td class="text-center"><%= index+1 %></td>
 							<td class="text-center"><%- highlightHelper(item.name, keyword) %></td>
 							<td class="text-center"> 
-								<img class="img-reponsive img-avatar" src="<%= folderUpload + item.avatar %>" alt="<%= item.name %>" />
+								<%- imageHelper(folderUpload, item.avatar ,  item.name) %>
 							</td>
 							<td class="text-center position-relative">
 								<%- statusHelper(linkPrefix, item.status, item.id) %>

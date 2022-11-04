@@ -18,5 +18,6 @@ module.exports = {
     ERROR_GROUPACP: 'Phải là một giá trị khác rỗng',
     ERROR_GROUPS: 'Phải là một giá trị khác rỗng',
     ERROR_SLUG: 'Phải là một giá trị khác rỗng',
+    EDIT_SUCCESS: 'them thanh cong'
 };
 

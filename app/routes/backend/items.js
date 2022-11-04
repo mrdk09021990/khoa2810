@@ -5,14 +5,15 @@ const util = require('util');
 const modelName = 'items';
 
 
-const systemConfig  = require(__path_configs + 'system');
-const notify  		= require(__path_configs + 'notify');
-const ItemsModel 	= require(__path_schemas + 'items');
-const GroupsModel 	= require(__path_schemas + 'groups');
+const systemConfig  	= require(__path_configs + 'system');
+const notify  			= require(__path_configs + 'notify');
+const ItemsModel 		= require(__path_schemas + 'items');
+const GroupModel 		= require(__path_schemas + 'groups');
+const ItemsModel_Models	= require(__path_models + 'items');
 const ValidateItems	= require(__path_validates + 'items');
 const UtilsHelpers 	= require(__path_helpers + 'items');
 const ParamsHelpers = require(__path_helpers + 'params');
-const UploadHelpers = require(__path_helpers + 'upload');
+const FileHelpers = require(__path_helpers + 'file');
 
 const linkIndex		 = '/' + systemConfig.prefixAdmin + `/${modelName}/`;
 const pageTitleIndex = 'items Management';
@@ -20,7 +21,7 @@ const pageTitleAdd   = pageTitleIndex + ' - Add';
 const pageTitleEdit  = pageTitleIndex + ' - Edit';
 const folderView	 = __path_views + `pages/${modelName}/`;
 const StringHelpers  = require(__path_helpers + 'string');
-const uploadAvatar	 = UploadHelpers.upload('avatar' , 'items');
+const uploadAvatar	 = FileHelpers.upload('avatar' , 'items');
 
 // List items
 router.get('(/status/:status)?', async (req, res, next) => {
@@ -42,7 +43,7 @@ router.get('(/status/:status)?', async (req, res, next) => {
 	};
 
 
-	const groupsItems = await GroupsModel.find({} , {_id: 1 , name: 1})
+	const groupsItems = await await GroupModel.find({} , {_id: 1 , name: 1})
 
 	groupsItems.unshift({_id: 'allvalue' , name: 'All groups'});
 
@@ -149,9 +150,10 @@ router.post('/change-ordering', (req, res, next) => {
 });
 
 // Delete
-router.get('/delete/:id', (req, res, next) => {
-	let id				= ParamsHelpers.getParam(req.params, 'id', ''); 	
-	ItemsModel.deleteOne({_id: id}, (err, result) => {
+router.get('/delete/:id', async (req, res, next) => {
+	let id				= ParamsHelpers.getParam(req.params, 'id', ''); 
+
+	ItemsModel_Models.deleteItem(id , {task: 'delete-one'}).then((result) => {
 		req.flash('success', notify.DELETE_SUCCESS, false);
 		res.redirect(linkIndex);
 	});
@@ -172,7 +174,7 @@ router.get(('/form(/:id)?'), async (req, res, next) => {
 	let errors   = null;
 	let groupsItems = [];
 
-	await GroupsModel.find({} , {_id: 1 , name: 1}).then((items) =>{
+	await GroupModel.find({} , {_id: 1 , name: 1}).then((items) =>{
 		groupsItems = items;
 		groupsItems.unshift({_id: 'novalue' , name: 'Choose groups'});
 	})
@@ -192,80 +194,32 @@ router.post('/save',  (req, res, next) => {
 	uploadAvatar (req, res, async (errUpload) => {
 		
 		req.body = JSON.parse(JSON.stringify(req.body));
-
 		ValidateItems.validator(req);
 
 		let item = Object.assign(req.body);
-		
 		let errors = req.validationErrors();
 
 		if (errUpload){
 			errors.push({param: 'avatar' , msg: errUpload});
-			}
-		
-		
+		}
 
-		if(typeof item !== "undefined" && item.id !== "" ){	// edit
-			if(errors) { 
-				let groupsItems = [];
+		let taskCurrent = (typeof item !== "undefined" && item.id !== "") ? "edit" : "add";
 
-				await GroupsModel.find({} , {_id: 1 , name: 1}).then((items) =>{
-					groupsItems = items;
-					groupsItems.unshift({_id: 'novalue' , name: 'Choose groups'});
-				})
-		
-				res.render(`${folderView}form`, { pageTitle: pageTitleEdit, item, errors , groupsItems});
-			}else {
-				
-				ItemsModel.updateOne({_id: item.id}, {
-					ordering: parseInt(item.ordering),
-					name			: item.name,
-					content			: item.content,
-					status			: item.status,
-					avatar 			: item.avatar,
-					slug 			: StringHelpers.createAlias(item.slug),
-					groups :  {
-						id     : item.groups_id,
-						name   : item.groups_name,
-					},
-					modified: {
-						user_id     : 0,
-						user_name   : 0,
-						time       : Date.now()
-					}
-				}, (err, result) => {
-					req.flash('success', notify.EDIT_SUCCESS, false);
-					res.redirect(linkIndex);
-				});
-			}
-		}else { // add
-			if(errors) { 
-				// console.log(req.file.filename);
-				let groupsItems = [];
-
-				await GroupsModel.find({} , {_id: 1 , name: 1}).then((items) =>{
-					groupsItems = items;
-					groupsItems.unshift({_id: 'novalue' , name: 'Choose groups'});
-				})
-				res.render(`${folderView}form`, { pageTitle: pageTitleAdd, item, errors  , groupsItems});
-			}else {
-				item.created = {
-					user_id     : 0,
-					user_name   : 'admin',
-					time       : Date.now()
-				},
-				item.slug =	StringHelpers.createAlias(item.slug),
-				item.groups = {
-					id     : item.groups_id,
-					name   : item.groups_name,	
-				},
-				// item.avatar = req.file.filename;
-				
-				new ItemsModel(item).save().then(()=> {
-					req.flash('success', notify.ADD_SUCCESS, false);
-					res.redirect(linkIndex);
-				})
-			}
+		if (errors) {
+			let pageTitle = (taskCurrent == "add") ? pageTitleAdd : pageTitleEdit;
+			FileHelpers.remove('public/uploads/items/' , req.file.filename);
+			let groupsItems = [];
+			await ItemsModel_Models.listItemInSelectbox().then((items) =>{
+				groupsItems = items;
+				groupsItems.unshift({_id: 'allvalue' , name: 'All groups'});
+			})
+		}else{
+			let message = (taskCurrent == "add") ? notify.EDIT_SUCCESS : notify.EDIT_SUCCESS;
+			item.avatar =req.file.filename;
+			ItemsModel_Models.saveItem(item , {task: taskCurrent}).then((result) => {
+				req.flash('success', message , false);
+				res.redirect(linkIndex);
+			})
 		}
 			
 	});		

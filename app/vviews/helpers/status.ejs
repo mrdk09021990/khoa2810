@@ -5,7 +5,7 @@
         if(status === "active") {
             xhtmlStatus = 'btn-success';
         }else if (status === "inactive") {
-            xhtmlStatus = 'fas fa-x-ray';
+            xhtmlStatus = 'btn-warning';
         }
 
         return `<a href="${link}" class="rounded-circle btn btn-sm ${xhtmlStatus}"><i class="fas fa-thermometer-half"></i></a>`;
