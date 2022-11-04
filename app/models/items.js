@@ -88,7 +88,7 @@ module.exports = {
         }
     },
 
-    listItemInSelectbox : (params , options = nul) => {
+    listItemInSelectbox : (params , options = null) => {
         return GroupModel.find({} , {_id: 1 , name: 1})
     }
 }

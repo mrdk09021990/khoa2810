@@ -10,10 +10,10 @@ const notify  			= require(__path_configs + 'notify');
 const ItemsModel 		= require(__path_schemas + 'items');
 const GroupModel 		= require(__path_schemas + 'groups');
 const ItemsModel_Models	= require(__path_models + 'items');
-const ValidateItems	= require(__path_validates + 'items');
-const UtilsHelpers 	= require(__path_helpers + 'items');
-const ParamsHelpers = require(__path_helpers + 'params');
-const FileHelpers = require(__path_helpers + 'file');
+const ValidateItems		= require(__path_validates + 'items');
+const UtilsHelpers 		= require(__path_helpers + 'items');
+const ParamsHelpers 	= require(__path_helpers + 'params');
+const FileHelpers 		= require(__path_helpers + 'file');
 
 const linkIndex		 = '/' + systemConfig.prefixAdmin + `/${modelName}/`;
 const pageTitleIndex = 'items Management';
@@ -194,25 +194,20 @@ router.post('/save',  (req, res, next) => {
 	uploadAvatar (req, res, async (errUpload) => {
 		
 		req.body = JSON.parse(JSON.stringify(req.body));
-		ValidateItems.validator(req);
-
 		let item = Object.assign(req.body);
-		let errors = req.validationErrors();
-
-		if (errUpload){
-			errors.push({param: 'avatar' , msg: errUpload});
-		}
-
 		let taskCurrent = (typeof item !== "undefined" && item.id !== "") ? "edit" : "add";
+		let errors = ValidateItems.validator(req , errUpload , taskCurrent);
 
 		if (errors) {
 			let pageTitle = (taskCurrent == "add") ? pageTitleAdd : pageTitleEdit;
-			FileHelpers.remove('public/uploads/items/' , req.file.filename);
+			if(req.file != undefined) FileHelpers.remove('public/uploads/items/' , req.file.filename);
+
 			let groupsItems = [];
 			await ItemsModel_Models.listItemInSelectbox().then((items) =>{
 				groupsItems = items;
 				groupsItems.unshift({_id: 'allvalue' , name: 'All groups'});
-			})
+			});
+			res.render(`${folderView}form` , {pageTitle , item , errors , groupsItems});
 		}else{
 			let message = (taskCurrent == "add") ? notify.EDIT_SUCCESS : notify.EDIT_SUCCESS;
 			item.avatar =req.file.filename;
